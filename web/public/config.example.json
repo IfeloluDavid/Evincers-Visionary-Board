@@ -1,0 +1,7 @@
+{
+  "devMode": true,
+  "region": "local",
+  "userPoolId": "local",
+  "userPoolClientId": "local",
+  "apiUrl": "http://localhost:8787"
+}

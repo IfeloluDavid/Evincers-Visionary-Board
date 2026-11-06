@@ -1,0 +1,153 @@
+# Evincers Vision Board
+
+A vision board the whole church can use. Every member has their own account, writes down the visions God has put on
+their heart, breaks each one into actionable steps, and tracks progress over time. Members can optionally share a
+vision with the church community feed.
+
+> “Write the vision and make it plain on tablets, that he may run who reads it.” — Habakkuk 2:2
+
+**Fully serverless, deployed into your own AWS account with Terraform.**
+
+## Features
+
+- **Accounts** — email + password sign-up with emailed verification code, sign-in, forgot-password (Amazon Cognito)
+- **Visions** — title, area of life (spiritual, family, health, work, finances, ministry, learning, other), "make it plain"
+  description, anchor scripture, target date, status (in progress / achieved / on hold)
+- **Actionable steps** — checklist per vision with optional due dates; progress ring and bars update automatically
+- **Up next** — open steps across all your visions, soonest due first, tickable straight from the board
+- **Community** — opt-in per vision. Others see title, description, scripture and progress. **Steps and email are never shared.**
+- **Privacy by default** — every vision is private until you tick “Share with the church community”
+- Responsive, light/dark mode, keyboard accessible
+
+## Architecture
+
+```
+                     ┌────────────────────────── your AWS account ───────────────────────────┐
+                     │                                                                       │
+ Browser ──HTTPS──▶  CloudFront ──(OAC)──▶ S3 (private bucket: React SPA + config.json)       │
+   │                 │                                                                       │
+   │  sign up / in   │                                                                       │
+   ├───(SRP)────────▶ Cognito User Pool  ── issues ID token (JWT) ─┐                         │
+   │                                                               ▼                         │
+   └──── Bearer JWT ─────────────────────▶ API Gateway (HTTP API, JWT authorizer)            │
+                                                   │  verified claims (sub, name)            │
+                                                   ▼                                         │
+                                           Lambda (Node 22, arm64) ──▶ DynamoDB (on-demand)  │
+                     └───────────────────────────────────────────────────────────────────────┘
+```
+
+| Concern | Service | Notes |
+| --- | --- | --- |
+| Static site | S3 + CloudFront | Bucket is private (Origin Access Control); security headers + CSP; SPA fallback to `index.html` |
+| Auth | Cognito User Pool | Self sign-up (toggle with `allow_self_signup`), SRP auth, no client secret |
+| API | API Gateway HTTP API | JWT authorizer verifies the token **before** Lambda runs; throttled; access logs |
+| Compute | One Lambda | Small router in `backend/src/handler.ts`; IAM scoped to this one table only |
+| Data | DynamoDB single table | PAY_PER_REQUEST, point-in-time recovery, one sparse GSI for the community feed |
+| Config | `config.json` in the bucket | Written by Terraform (API URL, Cognito IDs) so the same build works in any environment |
+
+**Data model** (`PK` / `SK`)
+
+| Item | PK | SK |
+| --- | --- | --- |
+| Vision | `USER#<sub>` | `VISION#<id>` |
+| Step | `USER#<sub>` | `STEP#<visionId>#<id>` |
+| Community index | `GSI1PK = SHARED` (only on shared visions) | `GSI1SK = <updatedAt>#<id>` |
+
+Every query is scoped by the caller's Cognito `sub` taken from the verified token, never from the request, so one member
+cannot read or change another's data (covered by tests).
+
+**API** (all routes require a valid token)
+
+| Route | Purpose |
+| --- | --- |
+| `GET /visions` · `POST /visions` | list / create my visions |
+| `GET /visions/{id}` · `PATCH /visions/{id}` · `DELETE /visions/{id}` | read (with steps) / edit / delete (cascades to steps) |
+| `POST /visions/{id}/steps` · `PATCH …/steps/{stepId}` · `DELETE …/steps/{stepId}` | manage steps; progress counters recomputed |
+| `GET /steps/upcoming` | my open steps, soonest first |
+| `GET /community` | visions shared with the church |
+
+## Repository layout
+
+```
+backend/            Lambda API (TypeScript) + tests + local dev server
+  src/handler.ts      routes & business rules
+  src/dynamoStore.ts  DynamoDB access (single-table design)
+  dev/                in-memory store + local API server (no AWS needed)
+web/                React + Vite + TypeScript single-page app
+infra/terraform/    All AWS infrastructure
+scripts/            deploy.sh, dev-config.sh
+.github/workflows/  CI (typecheck, tests, build, terraform validate)
+```
+
+## Deploy to your AWS account
+
+**Prerequisites:** Node 20+ (22 recommended), [Terraform](https://developer.hashicorp.com/terraform/install) ≥ 1.6,
+[AWS CLI](https://aws.amazon.com/cli/) configured for your account (`aws sts get-caller-identity` should show the right
+account), and permissions to create IAM, Lambda, API Gateway, Cognito, DynamoDB, S3 and CloudFront resources.
+
+```bash
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars   # optional: edit region, domain, etc.
+./scripts/deploy.sh
+```
+
+`deploy.sh` runs the tests, bundles the Lambda, runs `terraform apply` (it shows you the plan and asks for
+confirmation), builds the site, syncs it to S3 and invalidates CloudFront. It prints the site URL at the end.
+Re-run it any time to ship changes.
+
+Prefer to run the steps yourself?
+
+```bash
+(cd backend && npm ci && npm run build)
+terraform -chdir=infra/terraform init
+terraform -chdir=infra/terraform apply
+(cd web && npm ci && npm run build)
+aws s3 sync web/dist s3://$(terraform -chdir=infra/terraform output -raw web_bucket) --delete --exclude config.json
+aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra/terraform output -raw cloudfront_distribution_id) --paths "/*"
+```
+
+### Custom domain (optional)
+
+1. Request an ACM certificate for your domain **in `us-east-1`** (CloudFront requirement) and validate it.
+2. Set `custom_domain` and `acm_certificate_arn` in `terraform.tfvars`, then apply.
+3. Create a `CNAME`/alias record pointing your domain at the `cloudfront_domain` output.
+
+### Remote state (recommended before more than one person deploys)
+
+Create an S3 bucket + DynamoDB lock table once, then uncomment the `backend "s3"` block in
+`infra/terraform/versions.tf` and run `terraform init -migrate-state`.
+
+## Local development (no AWS needed)
+
+```bash
+scripts/dev-config.sh local                 # web/public/config.json with devMode
+(cd backend && npm ci && npm run dev:api)   # mock API on :8787 (in-memory data)
+(cd web && npm ci && npm run dev)           # http://localhost:5173 — any email/password works
+```
+
+To develop the UI against your real deployed backend instead, run `scripts/dev-config.sh` (no argument) after a
+`terraform apply`; `http://localhost:5173` is already allowed by the API's CORS settings.
+
+Tests and checks: `cd backend && npm test && npm run typecheck`, `cd web && npm run build`.
+
+## Before you launch to the whole church
+
+These are deliberate defaults for getting started; tighten them for a real rollout.
+
+- **Email sending:** Cognito's built-in sender is limited to ~50 emails/day. Verify a domain in Amazon SES and switch
+  `email_configuration` in `cognito.tf` to `DEVELOPER` so sign-up codes reliably arrive.
+- **Who can sign up:** `allow_self_signup = true` means anyone with the URL can register. Options: set it to `false` and
+  invite people from the Cognito console, or add a Cognito *pre sign-up* Lambda that requires a church invite code.
+- **Protect the data:** set `table_deletion_protection = true` (and `deletion_protection = "ACTIVE"` on the user pool)
+  once real members' data exists. Point-in-time recovery is already on.
+- **Remote Terraform state** (above) and a **budget alert** in AWS Billing.
+- **Moderation:** shared visions are free text visible to all signed-in members. Consider a Cognito `admin` group plus
+  a “hide/remove” action before opening sharing widely.
+
+Cost: everything is pay-per-use. At the scale of a single church this should sit comfortably inside AWS free tiers /
+a few dollars a month at most — check current pricing for your region.
+
+## Roadmap ideas
+
+Encouragement/“praying for you” reactions on shared visions · vision cover images (S3 presigned uploads) ·
+recurring habits & weekly check-ins · email/SMS reminders for due steps (EventBridge + SES) · small-group boards ·
+admin dashboard · export to PDF/print for a physical board.

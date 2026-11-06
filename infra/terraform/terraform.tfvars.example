@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and adjust. terraform.tfvars is git-ignored.
+
+region      = "us-east-1"
+environment = "prod"
+
+# Anyone with the link can register. Set false to create members by hand in the Cognito console.
+allow_self_signup = true
+
+# Optional custom domain (certificate must be in us-east-1):
+# custom_domain       = "vision.yourchurch.org"
+# acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx"
+
+# Turn on once real data exists:
+# table_deletion_protection = true

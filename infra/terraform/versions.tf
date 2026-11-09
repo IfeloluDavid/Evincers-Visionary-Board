@@ -12,8 +12,8 @@ terraform {
     }
   }
 
-  # Local state is fine to start with. Before more than one person deploys,
-  # move state to S3 (see README -> "Remote state") and uncomment:
+  # Local state is fine to start with. Before CI or more than one person deploys, run
+  # scripts/use-remote-state.sh (see README) which writes a git-ignored backend.tf. Reference:
   #
   # backend "s3" {
   #   bucket         = "<your-tf-state-bucket>"

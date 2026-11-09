@@ -105,6 +105,42 @@ aws s3 sync web/dist s3://$(terraform -chdir=infra/terraform output -raw web_buc
 aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra/terraform output -raw cloudfront_distribution_id) --paths "/*"
 ```
 
+### Deploy from GitHub (CI/CD)
+
+Once set up, every push to `main` tests, builds and deploys to your AWS account. No AWS keys are stored in GitHub:
+the workflow gets short-lived credentials through OpenID Connect, and the role can only be assumed by **this repo's
+`main` branch**.
+
+**One-time setup (you run this with your own AWS login):**
+
+1. **Make `main` the default branch.** GitHub → repo → *Settings → Branches* → rename the default branch to `main`
+   (or merge the working branch into `main`).
+2. **Create the state bucket, lock table and deploy role:**
+   ```bash
+   terraform -chdir=infra/bootstrap init
+   terraform -chdir=infra/bootstrap apply          # add -var create_oidc_provider=false if your account already has GitHub's OIDC provider
+   terraform -chdir=infra/bootstrap output
+   ```
+3. **Add four repository variables** in GitHub → *Settings → Secrets and variables → Actions → Variables* (variables, not secrets):
+
+   | Variable | Value (from the `output` above) |
+   | --- | --- |
+   | `AWS_DEPLOY_ROLE_ARN` | `deploy_role_arn` |
+   | `AWS_REGION` | `region` |
+   | `TF_STATE_BUCKET` | `tf_state_bucket` |
+   | `TF_LOCK_TABLE` | `tf_lock_table` |
+
+4. **Deploy:** push to `main`, or run it by hand from *Actions → Deploy → Run workflow*. The site URL appears in the
+   run summary.
+
+> If you already deployed from your laptop with local state, move that state first so CI doesn't try to create
+> everything again: `scripts/use-remote-state.sh <bucket> <table> <region>` then
+> `terraform -chdir=infra/terraform init -migrate-state`.
+
+The deploy role has `AdministratorAccess` because Terraform creates IAM, Lambda, API Gateway, Cognito, DynamoDB, S3
+and CloudFront resources. It is locked to this repo and branch; tighten it to a custom policy once things are stable.
+Protect `main` (require pull requests) so only reviewed code can deploy.
+
 ### Custom domain (optional)
 
 1. Request an ACM certificate for your domain **in `us-east-1`** (CloudFront requirement) and validate it.
@@ -113,8 +149,8 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra/te
 
 ### Remote state (recommended before more than one person deploys)
 
-Create an S3 bucket + DynamoDB lock table once, then uncomment the `backend "s3"` block in
-`infra/terraform/versions.tf` and run `terraform init -migrate-state`.
+`infra/bootstrap` creates the state bucket and lock table for you (see *Deploy from GitHub*). Then run
+`scripts/use-remote-state.sh <bucket> <table> <region>` and `terraform -chdir=infra/terraform init -migrate-state`.
 
 ## Local development (no AWS needed)
 

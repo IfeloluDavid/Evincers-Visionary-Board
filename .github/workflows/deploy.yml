@@ -1,0 +1,47 @@
+name: Deploy
+
+# Deploys to AWS whenever main changes (or on demand from the Actions tab).
+# Needs the one-time setup in README -> "Deploy from GitHub": a role to assume plus four repository *variables*
+# (not secrets): AWS_DEPLOY_ROLE_ARN, AWS_REGION, TF_STATE_BUCKET, TF_LOCK_TABLE.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false # never interrupt a running terraform apply
+
+permissions:
+  id-token: write # lets the job request a short-lived AWS credential via OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false # the wrapper would pollute `terraform output -raw`
+
+      - name: Use shared remote state
+        run: ./scripts/use-remote-state.sh "${{ vars.TF_STATE_BUCKET }}" "${{ vars.TF_LOCK_TABLE }}" "${{ vars.AWS_REGION }}"
+
+      - name: Test, build, apply and publish
+        run: ./scripts/deploy.sh -auto-approve -var="region=${{ vars.AWS_REGION }}"
+
+      - name: Site URL
+        run: terraform -chdir=infra/terraform output -raw site_url >> "$GITHUB_STEP_SUMMARY"

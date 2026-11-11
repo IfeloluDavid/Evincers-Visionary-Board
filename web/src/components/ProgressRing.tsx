@@ -24,9 +24,11 @@ export default function ProgressRing({ value, size = 64 }: { value: number; size
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
         className="ring-bar"
       />
-      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" className="ring-text" fontSize={size / 3.6}>
-        {value}%
-      </text>
+      {size >= 48 && (
+        <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" className="ring-text" fontSize={size / 3.6}>
+          {value}%
+        </text>
+      )}
     </svg>
   );
 }

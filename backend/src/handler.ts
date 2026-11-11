@@ -1,13 +1,18 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { randomBytes } from 'node:crypto';
 import type { Store } from './store.js';
-import { LIMITS, type PublicVision, type Step, type Vision } from './types.js';
-import { ApiError, parseStep, parseVision } from './validate.js';
+import { computeJourney } from './journey.js';
+import { LIMITS, type Gratitude, type PublicVision, type Step, type Vision } from './types.js';
+import { ApiError, parseGratitude, parseProfile, parseStep, parseVision } from './validate.js';
+import { verseForDay } from './verses.js';
 
 interface Ctx {
   store: Store;
   userId: string;
+  email: string;
   ownerName: string;
+  /** Whether the reminder emailer has been deployed (set by Terraform). */
+  remindersConfigured: boolean;
   params: Record<string, string>;
   body: () => unknown;
 }
@@ -69,6 +74,7 @@ const createVision: Handler = async (ctx) => {
     targetDate: input.targetDate ?? null,
     status,
     visibility: input.visibility ?? 'private',
+    horizon: input.horizon ?? 'long',
     stepsTotal: 0,
     stepsDone: 0,
     createdAt: ts,
@@ -101,6 +107,7 @@ const updateVision: Handler = async (ctx) => {
     targetDate: input.targetDate === undefined ? vision.targetDate : input.targetDate,
     status,
     visibility: input.visibility ?? vision.visibility,
+    horizon: input.horizon ?? vision.horizon,
     achievedAt: status === 'achieved' ? (vision.achievedAt ?? ts) : null,
     updatedAt: ts,
   };
@@ -179,6 +186,60 @@ const upcomingSteps: Handler = async (ctx) => {
   return ok({ steps: upcoming });
 };
 
+// ------------------------------------------------- profile, gratitude, journey
+
+const me: Handler = async (ctx) => {
+  const profile = await ctx.store.getProfile(ctx.userId);
+  return ok({
+    name: ctx.ownerName,
+    email: ctx.email,
+    reminders: profile?.reminders ?? 'weekly',
+    remindersConfigured: ctx.remindersConfigured,
+    verse: verseForDay(new Date()),
+  });
+};
+
+const updateMe: Handler = async (ctx) => {
+  const input = parseProfile(ctx.body());
+  const existing = await ctx.store.getProfile(ctx.userId);
+  const profile = {
+    userId: ctx.userId,
+    reminders: input.reminders ?? existing?.reminders ?? 'weekly',
+    updatedAt: now(),
+  } as const;
+  await ctx.store.putProfile(profile);
+  return ok({ reminders: profile.reminders });
+};
+
+const listGratitude: Handler = async (ctx) => {
+  const all = await ctx.store.listGratitude(ctx.userId);
+  all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return ok({ entries: all.slice(0, LIMITS.maxGratitudeListed), total: all.length });
+};
+
+const createGratitude: Handler = async (ctx) => {
+  const { text } = parseGratitude(ctx.body());
+  const entry: Gratitude = { id: newId(), userId: ctx.userId, text, createdAt: now() };
+  await ctx.store.putGratitude(entry);
+  return ok({ entry }, 201);
+};
+
+const deleteGratitude: Handler = async (ctx) => {
+  const entry = await ctx.store.getGratitude(ctx.userId, ctx.params.id!);
+  if (!entry) throw new ApiError(404, 'Entry not found');
+  await ctx.store.deleteGratitude(ctx.userId, entry.id);
+  return { status: 204 };
+};
+
+const journey: Handler = async (ctx) => {
+  const [visions, steps, gratitude] = await Promise.all([
+    ctx.store.listVisions(ctx.userId),
+    ctx.store.listAllSteps(ctx.userId),
+    ctx.store.listGratitude(ctx.userId),
+  ]);
+  return ok({ journey: computeJourney({ visions, steps, gratitude, now: new Date() }) });
+};
+
 // -------------------------------------------------------------- community
 
 const community: Handler = async (ctx) => {
@@ -202,6 +263,12 @@ const routes: Array<[method: string, pattern: string, handler: Handler]> = [
   ['DELETE', '/visions/:id/steps/:stepId', deleteStep],
   ['GET', '/steps/upcoming', upcomingSteps],
   ['GET', '/community', community],
+  ['GET', '/me', me],
+  ['PATCH', '/me', updateMe],
+  ['GET', '/journey', journey],
+  ['GET', '/gratitude', listGratitude],
+  ['POST', '/gratitude', createGratitude],
+  ['DELETE', '/gratitude/:id', deleteGratitude],
 ];
 
 function match(pattern: string, path: string): Record<string, string> | null {
@@ -232,6 +299,7 @@ export async function handle(
       .authorizer?.jwt?.claims;
     const userId = typeof claims?.sub === 'string' ? claims.sub : undefined;
     if (!userId) throw new ApiError(401, 'Unauthorized');
+    const email = typeof claims?.email === 'string' ? claims.email : '';
     const ownerName = String(claims?.name ?? claims?.email ?? 'Church member').split('@')[0]!.slice(0, 60);
 
     const method = event.requestContext.http.method;
@@ -244,7 +312,9 @@ export async function handle(
       const result = await handler({
         store,
         userId,
+        email,
         ownerName,
+        remindersConfigured: process.env.REMINDERS_ENABLED === 'true',
         params,
         body: () => {
           if (!event.body) throw new ApiError(400, 'Request body is required');

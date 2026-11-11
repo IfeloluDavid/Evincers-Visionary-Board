@@ -13,12 +13,10 @@ export default function Community() {
 
   return (
     <>
-      <section className="hero">
-        <div>
-          <h1>Church community</h1>
-          <p className="muted">Visions members have chosen to share. Be encouraged, and pray for one another.</p>
-        </div>
-      </section>
+      <header className="page-head">
+        <h1 className="script-title">Church <span>Community</span></h1>
+        <p className="muted">Visions members have chosen to share. Be encouraged, and pray for one another.</p>
+      </header>
 
       {error && <p className="error banner" role="alert">{error}</p>}
 
@@ -26,8 +24,7 @@ export default function Community() {
         <p className="muted">Loading…</p>
       ) : visions?.length === 0 ? (
         <section className="empty">
-          <div className="empty-icon" aria-hidden>⛪</div>
-          <h2>Nothing shared yet</h2>
+          <h2 className="script-h">Nothing shared yet</h2>
           <p>When members share a vision with the church, it appears here. Open one of yours and tick “Share with the church community” to be the first.</p>
         </section>
       ) : (

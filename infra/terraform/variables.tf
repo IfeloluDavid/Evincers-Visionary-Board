@@ -51,3 +51,39 @@ variable "table_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "reminder_from_email" {
+  description = "Sender address for reminder emails, e.g. visionboard@yourchurch.org. Leave empty to deploy without reminders. Amazon SES must verify it (see README)."
+  type        = string
+  default     = ""
+}
+
+variable "create_ses_identity" {
+  description = "Create the SES identity for reminder_from_email (AWS emails it a verification link). Set false if you already verified it or its whole domain in SES."
+  type        = bool
+  default     = true
+}
+
+variable "reminder_schedule" {
+  description = "When reminders go out (EventBridge cron). Default: every Monday 07:00."
+  type        = string
+  default     = "cron(0 7 ? * MON *)"
+}
+
+variable "reminder_timezone" {
+  description = "IANA timezone the reminder_schedule is evaluated in, e.g. Africa/Lagos or Europe/London."
+  type        = string
+  default     = "UTC"
+}
+
+variable "budget_email" {
+  description = "Optional: email an AWS Budgets alert here if your account's monthly spend is forecast to pass monthly_budget_usd."
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly spend (whole AWS account) that triggers the budget alert."
+  type        = number
+  default     = 10
+}

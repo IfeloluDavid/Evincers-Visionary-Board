@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
-import { CATEGORY_META, CATEGORY_ORDER, STATUS_LABEL } from '../lib';
-import type { Category, Status, Vision, VisionInput, Visibility } from '../types';
+import { CATEGORY_META, CATEGORY_ORDER, HORIZON_META, STATUS_LABEL } from '../lib';
+import type { Category, Horizon, Status, Vision, VisionInput, Visibility } from '../types';
 
 interface Props {
   /** Pass a vision to edit it; omit to create a new one. */
@@ -14,6 +14,7 @@ export default function VisionForm({ vision, onClose, onSaved }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState(vision?.title ?? '');
   const [category, setCategory] = useState<Category>(vision?.category ?? 'spiritual');
+  const [horizon, setHorizon] = useState<Horizon>(vision?.horizon ?? 'long');
   const [description, setDescription] = useState(vision?.description ?? '');
   const [scripture, setScripture] = useState(vision?.scripture ?? '');
   const [targetDate, setTargetDate] = useState(vision?.targetDate ?? '');
@@ -33,6 +34,7 @@ export default function VisionForm({ vision, onClose, onSaved }: Props) {
     const input: VisionInput = {
       title,
       category,
+      horizon,
       description,
       scripture,
       targetDate: targetDate || null,
@@ -51,7 +53,7 @@ export default function VisionForm({ vision, onClose, onSaved }: Props) {
   return (
     <dialog ref={dialog} className="modal" onClose={onClose} onClick={(e) => e.target === dialog.current && onClose()}>
       <form onSubmit={submit} className="stack">
-        <h2>{vision ? 'Edit vision' : 'Write a new vision'}</h2>
+        <h2 className="script-h">{vision ? 'Edit vision' : 'Write the vision'}</h2>
 
         <label>
           What is the vision?
@@ -65,19 +67,37 @@ export default function VisionForm({ vision, onClose, onSaved }: Props) {
           />
         </label>
 
-        <label>
-          Area of life
-          <select value={category} onChange={(e) => setCategory(e.target.value as Category)}>
-            {CATEGORY_ORDER.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_META[c].emoji} {CATEGORY_META[c].label}
-              </option>
+        <fieldset className="field">
+          <legend>Area of life</legend>
+          <div className="pick-grid">
+            {CATEGORY_ORDER.map((c) => {
+              const Icon = CATEGORY_META[c].icon;
+              return (
+                <label key={c} className={`pick cat-${c} ${category === c ? 'on' : ''}`}>
+                  <input type="radio" name="category" checked={category === c} onChange={() => setCategory(c)} />
+                  <Icon size={18} aria-hidden />
+                  <span>{CATEGORY_META[c].label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset className="field">
+          <legend>Time horizon</legend>
+          <div className="seg">
+            {(Object.keys(HORIZON_META) as Horizon[]).map((h) => (
+              <label key={h} className={horizon === h ? 'on' : ''}>
+                <input type="radio" name="horizon" checked={horizon === h} onChange={() => setHorizon(h)} />
+                <strong>{HORIZON_META[h].label}</strong>
+                <small>{HORIZON_META[h].hint}</small>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </fieldset>
 
         <label>
-          Make it plain <span className="muted">(why does it matter?)</span>
+          <span>Make it plain <span className="muted">(why does it matter?)</span></span>
           <textarea
             rows={3}
             maxLength={2000}
@@ -88,18 +108,13 @@ export default function VisionForm({ vision, onClose, onSaved }: Props) {
         </label>
 
         <label>
-          Anchor scripture or declaration <span className="muted">(optional)</span>
-          <input
-            maxLength={300}
-            value={scripture}
-            onChange={(e) => setScripture(e.target.value)}
-            placeholder="e.g. Philippians 4:13"
-          />
+          <span>Anchor scripture or declaration <span className="muted">(optional)</span></span>
+          <input maxLength={300} value={scripture} onChange={(e) => setScripture(e.target.value)} placeholder="e.g. Philippians 4:13" />
         </label>
 
         <div className="row">
           <label>
-            Target date <span className="muted">(optional)</span>
+            <span>Target date <span className="muted">(optional)</span></span>
             <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
           </label>
           {vision && (
@@ -117,16 +132,10 @@ export default function VisionForm({ vision, onClose, onSaved }: Props) {
         </div>
 
         <label className="check">
-          <input
-            type="checkbox"
-            checked={visibility === 'church'}
-            onChange={(e) => setVisibility(e.target.checked ? 'church' : 'private')}
-          />
+          <input type="checkbox" checked={visibility === 'church'} onChange={(e) => setVisibility(e.target.checked ? 'church' : 'private')} />
           <span>
             Share with the church community
-            <small className="muted">
-              Other members will see the title, description, scripture and progress. Your steps stay private.
-            </small>
+            <small className="muted">Others will see the title, description, scripture and progress. Your steps stay private.</small>
           </span>
         </label>
 

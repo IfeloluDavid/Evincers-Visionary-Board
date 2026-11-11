@@ -1,9 +1,11 @@
 import type { Store } from '../src/store.js';
-import type { Step, Vision } from '../src/types.js';
+import type { Gratitude, Profile, Step, Vision } from '../src/types.js';
 
 export function createMemoryStore(): Store {
   const visions = new Map<string, Vision>(); // `${userId}|${id}`
   const steps = new Map<string, Step>(); // `${userId}|${visionId}|${id}`
+  const profiles = new Map<string, Profile>();
+  const gratitude = new Map<string, Gratitude>(); // `${userId}|${id}`
 
   return {
     async listVisions(userId) {
@@ -33,6 +35,24 @@ export function createMemoryStore(): Store {
     },
     async deleteStep(userId, visionId, id) {
       steps.delete(`${userId}|${visionId}|${id}`);
+    },
+    async getProfile(userId) {
+      return profiles.get(userId) ?? null;
+    },
+    async putProfile(p) {
+      profiles.set(p.userId, structuredClone(p));
+    },
+    async listGratitude(userId) {
+      return [...gratitude.values()].filter((g) => g.userId === userId).sort((a, b) => a.id.localeCompare(b.id));
+    },
+    async putGratitude(g) {
+      gratitude.set(`${g.userId}|${g.id}`, structuredClone(g));
+    },
+    async getGratitude(userId, id) {
+      return gratitude.get(`${userId}|${id}`) ?? null;
+    },
+    async deleteGratitude(userId, id) {
+      gratitude.delete(`${userId}|${id}`);
     },
     async listShared(limit) {
       return [...visions.values()]

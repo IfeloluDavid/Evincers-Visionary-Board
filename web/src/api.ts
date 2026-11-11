@@ -1,6 +1,6 @@
 import { getIdToken, signOut } from './auth';
 import { config } from './config';
-import type { PublicVision, Step, StepInput, UpcomingStep, Vision, VisionInput } from './types';
+import type { Gratitude, Journey, Me, PublicVision, Reminders, Step, StepInput, UpcomingStep, Vision, VisionInput } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -57,4 +57,12 @@ export const api = {
 
   upcoming: () => request<{ steps: UpcomingStep[] }>('GET', '/steps/upcoming').then((r) => r.steps),
   community: () => request<{ visions: PublicVision[] }>('GET', '/community').then((r) => r.visions),
+
+  me: () => request<Me>('GET', '/me'),
+  setReminders: (reminders: Reminders) => request<{ reminders: Reminders }>('PATCH', '/me', { reminders }),
+  journey: () => request<{ journey: Journey }>('GET', '/journey').then((r) => r.journey),
+
+  gratitude: () => request<{ entries: Gratitude[]; total: number }>('GET', '/gratitude'),
+  addGratitude: (text: string) => request<{ entry: Gratitude }>('POST', '/gratitude', { text }).then((r) => r.entry),
+  deleteGratitude: (id: string) => request<void>('DELETE', `/gratitude/${id}`),
 };

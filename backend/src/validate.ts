@@ -1,4 +1,4 @@
-import { CATEGORIES, STATUSES, VISIBILITIES } from './types.js';
+import { CATEGORIES, HORIZONS, REMINDER_FREQUENCIES, STATUSES, VISIBILITIES } from './types.js';
 
 export class ApiError extends Error {
   constructor(
@@ -59,6 +59,7 @@ export interface VisionInput {
   targetDate?: string | null;
   status?: (typeof STATUSES)[number];
   visibility?: (typeof VISIBILITIES)[number];
+  horizon?: (typeof HORIZONS)[number];
 }
 
 export function parseVision(raw: unknown, mode: 'create' | 'update'): VisionInput {
@@ -72,6 +73,7 @@ export function parseVision(raw: unknown, mode: 'create' | 'update'): VisionInpu
     targetDate: date(body, 'targetDate'),
     status: oneOf(body, 'status', STATUSES),
     visibility: oneOf(body, 'visibility', VISIBILITIES),
+    horizon: oneOf(body, 'horizon', HORIZONS),
   };
   return out;
 }
@@ -93,4 +95,14 @@ export function parseStep(raw: unknown, mode: 'create' | 'update'): StepInput {
     out.done = body.done;
   }
   return out;
+}
+
+export function parseGratitude(raw: unknown): { text: string } {
+  const body = asBody(raw);
+  return { text: text(body, 'text', 300, true)! };
+}
+
+export function parseProfile(raw: unknown): { reminders?: (typeof REMINDER_FREQUENCIES)[number] } {
+  const body = asBody(raw);
+  return { reminders: oneOf(body, 'reminders', REMINDER_FREQUENCIES) };
 }

@@ -12,3 +12,12 @@ allow_self_signup = true
 
 # Turn on once real data exists:
 # table_deletion_protection = true
+
+# Weekly reminder emails (needs Amazon SES; see README -> "Email reminders"):
+# reminder_from_email = "visionboard@yourchurch.org"
+# reminder_timezone   = "Africa/Lagos"      # schedule below is evaluated in this timezone
+# reminder_schedule   = "cron(0 8 ? * MON *)"  # Mondays 08:00
+
+# Cost safety net (emails you if the account's monthly spend is forecast to pass the limit):
+# budget_email       = "you@example.org"
+# monthly_budget_usd = 10

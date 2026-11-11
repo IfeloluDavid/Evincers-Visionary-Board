@@ -1,14 +1,23 @@
-import type { Category, Status } from './types';
+import {
+  BookOpen, Briefcase, Brain, Compass, GraduationCap, HandHeart, HeartHandshake, HeartPulse, House,
+  Palette, Sparkles, Store, Wallet, type LucideIcon,
+} from 'lucide-react';
+import type { Category, Horizon, Status } from './types';
 
-export const CATEGORY_META: Record<Category, { label: string; emoji: string; hint: string }> = {
-  spiritual: { label: 'Spiritual growth', emoji: '🕊️', hint: 'Prayer, the Word, devotion' },
-  family: { label: 'Family & relationships', emoji: '🏡', hint: 'Marriage, children, friendships' },
-  health: { label: 'Health & wellbeing', emoji: '🌿', hint: 'Body, mind, rest' },
-  career: { label: 'Work & calling', emoji: '💼', hint: 'Career, business, skills' },
-  finance: { label: 'Finances & stewardship', emoji: '🪙', hint: 'Saving, giving, debt-freedom' },
-  ministry: { label: 'Ministry & service', emoji: '🙌', hint: 'Serving church and community' },
-  education: { label: 'Learning', emoji: '📖', hint: 'Study, certifications, reading' },
-  other: { label: 'Other', emoji: '✨', hint: 'Anything else God has put on your heart' },
+export const CATEGORY_META: Record<Category, { label: string; icon: LucideIcon; hint: string }> = {
+  spiritual: { label: 'Spiritual growth', icon: BookOpen, hint: 'Prayer, the Word, devotion' },
+  family: { label: 'Family & home', icon: House, hint: 'Marriage, children, parents' },
+  relationships: { label: 'Relationships', icon: HeartHandshake, hint: 'Friendship, courtship, community' },
+  health: { label: 'Health & wellbeing', icon: HeartPulse, hint: 'Body, fitness, rest' },
+  mind: { label: 'Mind & emotions', icon: Brain, hint: 'Mindset, healing, peace' },
+  career: { label: 'Work & calling', icon: Briefcase, hint: 'Career, skills, promotion' },
+  business: { label: 'Business', icon: Store, hint: 'Start, grow or scale' },
+  finance: { label: 'Finances', icon: Wallet, hint: 'Saving, giving, debt-freedom' },
+  ministry: { label: 'Ministry & service', icon: HandHeart, hint: 'Serving church and community' },
+  education: { label: 'Learning', icon: GraduationCap, hint: 'Study, certifications, reading' },
+  creativity: { label: 'Creativity', icon: Palette, hint: 'Art, music, writing, design' },
+  lifestyle: { label: 'Lifestyle & travel', icon: Compass, hint: 'Adventure, home, experiences' },
+  other: { label: 'Other', icon: Sparkles, hint: 'Anything else on your heart' },
 };
 
 export const CATEGORY_ORDER = Object.keys(CATEGORY_META) as Category[];
@@ -17,6 +26,11 @@ export const STATUS_LABEL: Record<Status, string> = {
   active: 'In progress',
   achieved: 'Achieved',
   paused: 'On hold',
+};
+
+export const HORIZON_META: Record<Horizon, { label: string; hint: string }> = {
+  immediate: { label: 'Immediate goal', hint: 'In the next few weeks or months' },
+  long: { label: 'Long-term goal', hint: 'A season or more away' },
 };
 
 /** Parse a YYYY-MM-DD string as a local date (new Date('2027-01-01') would be UTC). */
@@ -46,3 +60,8 @@ export function relativeDay(iso: string): { text: string; tone: 'late' | 'soon' 
 }
 
 export const percent = (done: number, total: number) => (total === 0 ? 0 : Math.round((done / total) * 100));
+
+export function greeting(now = new Date()): string {
+  const h = now.getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}

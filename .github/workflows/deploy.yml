@@ -28,6 +28,23 @@ jobs:
         with:
           node-version: 22
 
+      # TEMPORARY diagnostic: prints the (non-secret) identity claims GitHub presents to AWS, so the IAM trust rule can be
+      # matched exactly. Remove once the deploy role can be assumed.
+      - name: Show OIDC claims
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import os, json, base64, urllib.request
+          req = urllib.request.Request(os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] + '&audience=sts.amazonaws.com',
+                                       headers={'Authorization': 'bearer ' + os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+          tok = json.load(urllib.request.urlopen(req))['value']
+          payload = tok.split('.')[1]
+          payload += '=' * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          for k in ('sub', 'aud', 'repository', 'ref', 'repository_id', 'repository_owner_id', 'job_workflow_ref'):
+              print(f'{k} = {claims.get(k)}')
+          PY
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}

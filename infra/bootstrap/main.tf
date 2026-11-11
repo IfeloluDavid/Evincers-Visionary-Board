@@ -28,6 +28,18 @@ variable "github_repo" {
   default     = "IfeloluDavid/Evincers-Visionary-Board"
 }
 
+variable "github_owner_id" {
+  description = "Numeric GitHub id of the repo owner. GitHub now puts ids in the OIDC subject (repo:OWNER@ID/NAME@ID:...). Find it in the 'sub' claim of a failed run or at https://api.github.com/users/<owner>."
+  type        = string
+  default     = "48281015"
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub id of the repository (https://api.github.com/repos/<owner>/<name> -> id). Leave empty to trust only the classic name-based subject."
+  type        = string
+  default     = "1447210248"
+}
+
 variable "branch" {
   description = "Only pushes to this branch may deploy."
   type        = string
@@ -41,6 +53,17 @@ variable "create_oidc_provider" {
 }
 
 data "aws_caller_identity" "current" {}
+
+locals {
+  repo_owner = split("/", var.github_repo)[0]
+  repo_name  = split("/", var.github_repo)[1]
+
+  # GitHub issues OIDC subjects in the id-based form for this repo; the classic name-based form is kept as a fallback.
+  allowed_subjects = compact([
+    "repo:${var.github_repo}:ref:refs/heads/${var.branch}",
+    var.github_repo_id != "" ? "repo:${local.repo_owner}@${var.github_owner_id}/${local.repo_name}@${var.github_repo_id}:ref:refs/heads/${var.branch}" : "",
+  ])
+}
 
 # ---------------------------------------------------------------- Terraform state
 
@@ -117,7 +140,7 @@ data "aws_iam_policy_document" "trust" {
     condition {
       test     = "StringEqualsIgnoreCase"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:ref:refs/heads/${var.branch}"]
+      values   = local.allowed_subjects
     }
   }
 }

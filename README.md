@@ -11,13 +11,22 @@ vision with the church community feed.
 ## Features
 
 - **Accounts** — email + password sign-up with emailed verification code, sign-in, forgot-password (Amazon Cognito)
-- **Visions** — title, area of life (spiritual, family, health, work, finances, ministry, learning, other), "make it plain"
-  description, anchor scripture, target date, status (in progress / achieved / on hold)
-- **Actionable steps** — checklist per vision with optional due dates; progress ring and bars update automatically
-- **Up next** — open steps across all your visions, soonest due first, tickable straight from the board
+- **Visions** — title, one of 13 areas of life (spiritual, family, relationships, health, mind, work, business, finances,
+  ministry, learning, creativity, lifestyle, other), time horizon (immediate or long-term, like the printed card),
+  "make it plain" description, anchor scripture, target date, status
+- **Actionable steps** — checklist per vision with due dates, shown as a trail of stepping stones up to the summit
+- **My Journey** — a game-like map: earn XP for writing visions, finishing steps, giving thanks and seeing visions
+  fulfilled; climb six levels (Dreamer → Planner → Builder → Pathfinder → Overcomer → Visionary); keep a weekly
+  streak; collect 10 badges
+- **Gratitude journal** — the "What I'm grateful for" section of the postcard, kept all year
+- **Weekly email reminders** — a Monday check-in with what is overdue, what is due this week, progress on each vision and
+  a verse. Members choose weekly, monthly or off in Settings
+- **Printable Postcard & Write-Up** — the Visionary Postcard and The Write-Up, pre-filled from a member's board or
+  printed blank for handwriting (A5 landscape)
+- **Verse of the day**, **Up next** list across all visions, level-up and badge celebrations
 - **Community** — opt-in per vision. Others see title, description, scripture and progress. **Steps and email are never shared.**
 - **Privacy by default** — every vision is private until you tick “Share with the church community”
-- Responsive, light/dark mode, keyboard accessible
+- Responsive with a phone tab bar, light/dark mode, keyboard accessible
 
 ## Architecture
 
@@ -33,6 +42,9 @@ vision with the church community feed.
                                                    │  verified claims (sub, name)            │
                                                    ▼                                         │
                                            Lambda (Node 22, arm64) ──▶ DynamoDB (on-demand)  │
+                     │                                                                       │
+                     │  EventBridge Scheduler ──(Mondays)──▶ Reminders Lambda ──▶ SES ──▶ email
+                     │                                   reads Cognito users + DynamoDB      │
                      └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,6 +55,7 @@ vision with the church community feed.
 | API | API Gateway HTTP API | JWT authorizer verifies the token **before** Lambda runs; throttled; access logs |
 | Compute | One Lambda | Small router in `backend/src/handler.ts`; IAM scoped to this one table only |
 | Data | DynamoDB single table | PAY_PER_REQUEST, point-in-time recovery, one sparse GSI for the community feed |
+| Reminders | EventBridge Scheduler → Lambda → SES | Optional; off until `reminder_from_email` is set. Read-only access to data and the user list |
 | Config | `config.json` in the bucket | Written by Terraform (API URL, Cognito IDs) so the same build works in any environment |
 
 **Data model** (`PK` / `SK`)
@@ -51,6 +64,8 @@ vision with the church community feed.
 | --- | --- | --- |
 | Vision | `USER#<sub>` | `VISION#<id>` |
 | Step | `USER#<sub>` | `STEP#<visionId>#<id>` |
+| Gratitude entry | `USER#<sub>` | `GRATITUDE#<id>` |
+| Settings | `USER#<sub>` | `PROFILE` |
 | Community index | `GSI1PK = SHARED` (only on shared visions) | `GSI1SK = <updatedAt>#<id>` |
 
 Every query is scoped by the caller's Cognito `sub` taken from the verified token, never from the request, so one member
@@ -65,11 +80,14 @@ cannot read or change another's data (covered by tests).
 | `POST /visions/{id}/steps` · `PATCH …/steps/{stepId}` · `DELETE …/steps/{stepId}` | manage steps; progress counters recomputed |
 | `GET /steps/upcoming` | my open steps, soonest first |
 | `GET /community` | visions shared with the church |
+| `GET /me` · `PATCH /me` | profile, verse of the day, reminder frequency |
+| `GET /journey` | XP, level, streak and badges (computed from your data) |
+| `GET /gratitude` · `POST /gratitude` · `DELETE /gratitude/{id}` | gratitude journal |
 
 ## Repository layout
 
 ```
-backend/            Lambda API (TypeScript) + tests + local dev server
+backend/            Lambda API + reminder emailer (TypeScript), tests, local dev server
   src/handler.ts      routes & business rules
   src/dynamoStore.ts  DynamoDB access (single-table design)
   dev/                in-memory store + local API server (no AWS needed)
@@ -165,6 +183,45 @@ To develop the UI against your real deployed backend instead, run `scripts/dev-c
 
 Tests and checks: `cd backend && npm test && npm run typecheck`, `cd web && npm run build`.
 
+## Email reminders
+
+Reminders are optional and switched on by one Terraform variable. Amazon SES (AWS's email service) requires a few
+one-time steps before it will email your members:
+
+1. **Pick a sender address** you can receive mail at, e.g. `visionboard@yourchurch.org`, and set it in
+   `infra/terraform/terraform.tfvars`:
+   ```hcl
+   reminder_from_email = "visionboard@yourchurch.org"
+   reminder_timezone   = "Africa/Lagos"   # your timezone; default schedule is Mondays 07:00 in it
+   ```
+2. Run `./scripts/deploy.sh`. AWS emails a **verification link** to that address; click it.
+3. **Ask AWS to move SES out of the sandbox** (SES console → *Account dashboard* → *Request production access*). Until
+   that is approved (usually within a day), SES only delivers to addresses you have individually verified, so
+   members will not receive reminders. Describe it as: “weekly check-in emails to registered members of our church
+   app; members can opt out in the app.”
+4. Optional but recommended: verify your whole domain in SES (adds DKIM so mail is less likely to land in spam), then
+   set `create_ses_identity = false`.
+
+Test it without waiting for Monday: Lambda console → `evincers-visionboard-prod-reminders` → *Test* (any JSON event).
+Members who sign up are on the weekly list by default; each can switch to monthly or off in **Settings**.
+
+## What it costs
+
+Everything is pay-per-use, so a church-sized app costs very little. Rough monthly estimates from AWS list prices in
+us-east-1 (check the [AWS Pricing Calculator](https://calculator.aws/) for your region; prices change):
+
+| Members | Typical monthly cost | Notes |
+| --- | --- | --- |
+| ~100 | **$0–1** | Mostly inside the always-free tiers (Lambda, CloudFront, DynamoDB storage, Cognito) |
+| ~500 | **$1–3** | ~2,200 reminder emails/month ≈ $0.22; a little API Gateway, DynamoDB and log storage |
+| ~2,000 | **$3–8** | ~8,700 emails ≈ $0.87; API requests and DynamoDB still only cents |
+
+The only line items that are not free-tier-dependent are small: API Gateway (about $1 per million requests), DynamoDB
+on-demand reads/writes and point-in-time-recovery backups (cents), SES email ($0.10 per 1,000), CloudWatch logs
+(30-day retention) and S3/CloudFront data transfer. Set `budget_email` in `terraform.tfvars` and AWS will email you if
+the account's monthly spend is forecast to pass `monthly_budget_usd` (default $10). A custom domain adds $0.50/month if
+you host its DNS in Route 53; the certificate is free.
+
 ## Before you launch to the whole church
 
 These are deliberate defaults for getting started; tighten them for a real rollout.
@@ -184,6 +241,6 @@ a few dollars a month at most — check current pricing for your region.
 
 ## Roadmap ideas
 
-Encouragement/“praying for you” reactions on shared visions · vision cover images (S3 presigned uploads) ·
-recurring habits & weekly check-ins · email/SMS reminders for due steps (EventBridge + SES) · small-group boards ·
-admin dashboard · export to PDF/print for a physical board.
+“Praying for you” reactions on shared visions · vision cover images (S3 presigned uploads) · recurring habits ·
+SMS/WhatsApp or push reminders · small-group boards and shared accountability partners · admin dashboard and moderation ·
+year-end Write-Up generated from the whole year's data.

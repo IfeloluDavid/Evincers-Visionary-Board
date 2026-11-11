@@ -8,7 +8,7 @@ import {
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { Store } from './store.js';
-import type { Step, Vision } from './types.js';
+import type { Gratitude, Profile, Step, Vision } from './types.js';
 
 /**
  * Single-table design
@@ -16,6 +16,8 @@ import type { Step, Vision } from './types.js';
  *   PK            SK                         item
  *   USER#<id>     VISION#<visionId>          Vision
  *   USER#<id>     STEP#<visionId>#<stepId>   Step
+ *   USER#<id>     GRATITUDE#<id>             Gratitude journal entry
+ *   USER#<id>     PROFILE                    Settings (reminder frequency)
  *
  *   GSI1 (only on visions shared with the church)
  *   GSI1PK = "SHARED", GSI1SK = <updatedAt>#<visionId>   -> Community feed
@@ -26,6 +28,9 @@ const userPk = (userId: string) => `USER#${userId}`;
 const visionSk = (visionId: string) => `VISION#${visionId}`;
 const stepSk = (visionId: string, stepId: string) => `STEP#${visionId}#${stepId}`;
 
+const gratitudeSk = (id: string) => `GRATITUDE#${id}`;
+const PROFILE_SK = 'PROFILE';
+
 const KEY_FIELDS = ['PK', 'SK', 'GSI1PK', 'GSI1SK', 'entity'] as const;
 
 function strip<T>(item: Record<string, unknown>): T {
@@ -33,6 +38,12 @@ function strip<T>(item: Record<string, unknown>): T {
   for (const f of KEY_FIELDS) delete copy[f];
   return copy as T;
 }
+
+/** Visions written before `horizon` existed are long-term goals. */
+const toVision = (item: Record<string, unknown>): Vision => {
+  const v = strip<Partial<Vision>>(item);
+  return { ...v, horizon: v.horizon ?? 'long' } as Vision;
+};
 
 export function createDynamoStore(tableName: string, client?: DynamoDBDocumentClient): Store {
   const doc =
@@ -66,12 +77,12 @@ export function createDynamoStore(tableName: string, client?: DynamoDBDocumentCl
 
   return {
     async listVisions(userId) {
-      return (await queryAll(userId, 'VISION#')).map((i) => strip<Vision>(i));
+      return (await queryAll(userId, 'VISION#')).map(toVision);
     },
 
     async getVision(userId, visionId) {
       const item = await getItem(userPk(userId), visionSk(visionId));
-      return item ? strip<Vision>(item) : null;
+      return item ? toVision(item) : null;
     },
 
     async putVision(vision) {
@@ -134,6 +145,42 @@ export function createDynamoStore(tableName: string, client?: DynamoDBDocumentCl
       );
     },
 
+    async getProfile(userId) {
+      const item = await getItem(userPk(userId), PROFILE_SK);
+      return item ? strip<Profile>(item) : null;
+    },
+
+    async putProfile(profile) {
+      await doc.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: { ...profile, PK: userPk(profile.userId), SK: PROFILE_SK, entity: 'PROFILE' },
+        }),
+      );
+    },
+
+    async listGratitude(userId) {
+      return (await queryAll(userId, 'GRATITUDE#')).map((i) => strip<Gratitude>(i));
+    },
+
+    async putGratitude(entry) {
+      await doc.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: { ...entry, PK: userPk(entry.userId), SK: gratitudeSk(entry.id), entity: 'GRATITUDE' },
+        }),
+      );
+    },
+
+    async getGratitude(userId, id) {
+      const item = await getItem(userPk(userId), gratitudeSk(id));
+      return item ? strip<Gratitude>(item) : null;
+    },
+
+    async deleteGratitude(userId, id) {
+      await doc.send(new DeleteCommand({ TableName: tableName, Key: { PK: userPk(userId), SK: gratitudeSk(id) } }));
+    },
+
     async listShared(limit) {
       const res = await doc.send(
         new QueryCommand({
@@ -145,7 +192,7 @@ export function createDynamoStore(tableName: string, client?: DynamoDBDocumentCl
           Limit: limit,
         }),
       );
-      return ((res.Items ?? []) as Record<string, unknown>[]).map((i) => strip<Vision>(i));
+      return ((res.Items ?? []) as Record<string, unknown>[]).map(toVision);
     },
   };
 }

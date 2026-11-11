@@ -1,6 +1,6 @@
 output "site_url" {
   description = "Where members open the app."
-  value       = var.custom_domain != "" ? "https://${var.custom_domain}" : local.site_origin
+  value       = local.site_url
 }
 
 output "cloudfront_domain" {
@@ -35,4 +35,9 @@ output "dynamodb_table" {
 # Handy for local development: scripts/dev-config.sh writes this into web/public/config.json.
 output "web_config" {
   value = jsondecode(local.web_config)
+}
+
+output "reminders" {
+  description = "Whether reminder emails are deployed, and what to do next."
+  value       = local.reminders_on ? "Enabled. Check ${var.reminder_from_email}'s inbox and click the AWS verification link, then request SES production access (README -> Email reminders)." : "Not deployed. Set reminder_from_email to turn on reminders."
 }

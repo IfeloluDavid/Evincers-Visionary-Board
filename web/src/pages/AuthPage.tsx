@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { CheckCircle2, Heart, Route as RouteIcon, Users } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import * as auth from '../auth';
 import { useAuth } from '../AuthContext';
+import { Logo } from '../components/Logo';
+import { Sprig, Swoosh } from '../components/Ornaments';
 import { config } from '../config';
 
 type Mode = 'signin' | 'signup' | 'confirm' | 'forgot' | 'reset';
@@ -87,19 +90,24 @@ export default function AuthPage() {
 
   return (
     <div className="auth-wrap">
-      <section className="auth-hero" aria-hidden>
-        <div className="brand big"><span className="brand-mark">★</span> Evincers <b>Vision Board</b></div>
-        <p className="lead">Write the vision. Make it plain. Take the next step.</p>
-        <ul>
-          <li>🕊️ Capture what God has put on your heart</li>
-          <li>✅ Break each vision into actionable steps</li>
-          <li>📈 Watch your progress grow, season by season</li>
-          <li>⛪ Share with — and be inspired by — the church</li>
-        </ul>
+      <section className="auth-hero">
+        <Swoosh className="hero-swoosh" />
+        <Sprig className="hero-sprig" />
+        <div className="hero-inner">
+          <Logo onDark />
+          <h2 className="hero-script">Dream it. Plan it. <span>Live it.</span></h2>
+          <p className="lead">A place for every member of the church to write the vision, make it plain, and take the next step.</p>
+          <ul>
+            <li><span><Heart size={18} aria-hidden /></span> Record what you are grateful for</li>
+            <li><span><CheckCircle2 size={18} aria-hidden /></span> Turn each vision into steps you can act on</li>
+            <li><span><RouteIcon size={18} aria-hidden /></span> Climb your journey, level by level</li>
+            <li><span><Users size={18} aria-hidden /></span> Be encouraged by the church community</li>
+          </ul>
+        </div>
       </section>
 
       <form className="auth-card stack" onSubmit={submit}>
-        <h1>{TITLES[mode]}</h1>
+        <h1 className="script-h">{TITLES[mode]}</h1>
         {config().devMode && <p className="notice">Local dev mode — any email and password will work.</p>}
         {info && <p className="notice" role="status">{info}</p>}
 

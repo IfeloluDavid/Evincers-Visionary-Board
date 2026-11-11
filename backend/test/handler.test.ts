@@ -163,3 +163,54 @@ describe('routing', () => {
     expect((await handle(event, store)).statusCode).toBe(400);
   });
 });
+
+describe('gratitude journal', () => {
+  it('adds, lists newest first, validates and deletes', async () => {
+    expect((await call('POST', '/gratitude', { body: { text: '   ' } })).status).toBe(400);
+    const a = (await call('POST', '/gratitude', { body: { text: 'My family' } })).json.entry;
+    await new Promise((r) => setTimeout(r, 3));
+    await call('POST', '/gratitude', { body: { text: 'Good health' } });
+
+    const list = await call('GET', '/gratitude');
+    expect(list.json.total).toBe(2);
+    expect(list.json.entries[0].text).toBe('Good health');
+
+    expect((await call('DELETE', `/gratitude/${a.id}`, { user: 'user-b' })).status).toBe(404);
+    expect((await call('DELETE', `/gratitude/${a.id}`)).status).toBe(204);
+    expect((await call('GET', '/gratitude')).json.total).toBe(1);
+  });
+});
+
+describe('profile and reminders setting', () => {
+  it('defaults to weekly, saves changes, rejects junk', async () => {
+    const first = await call('GET', '/me');
+    expect(first.json).toMatchObject({ name: 'Grace Adeyemi', reminders: 'weekly', remindersConfigured: false });
+    expect(first.json.verse.text).toBeTruthy();
+
+    expect((await call('PATCH', '/me', { body: { reminders: 'daily' } })).status).toBe(400);
+    expect((await call('PATCH', '/me', { body: { reminders: 'off' } })).json.reminders).toBe('off');
+    expect((await call('GET', '/me')).json.reminders).toBe('off');
+    expect((await call('GET', '/me', { user: 'user-b' })).json.reminders).toBe('weekly');
+  });
+});
+
+describe('journey endpoint and new fields', () => {
+  it('rolls up visions, steps and gratitude into xp and levels', async () => {
+    const v = (await call('POST', '/visions', { body: { title: 'Write a book', category: 'creativity', horizon: 'immediate' } })).json.vision;
+    expect(v.horizon).toBe('immediate');
+    const s = (await call('POST', `/visions/${v.id}/steps`, { body: { title: 'Outline' } })).json.step;
+    await call('PATCH', `/visions/${v.id}/steps/${s.id}`, { body: { done: true } });
+    await call('POST', '/gratitude', { body: { text: 'Time to write' } });
+
+    const { json } = await call('GET', '/journey');
+    expect(json.journey.xp).toBe(20 + 10 + 5);
+    expect(json.journey.stats).toMatchObject({ visions: 1, stepsDone: 1, gratitude: 1, areas: 1 });
+    expect(json.journey.streakWeeks).toBe(1);
+  });
+
+  it('defaults horizon to long and accepts the new areas of life', async () => {
+    const v = (await call('POST', '/visions', { body: { title: 'Start a business', category: 'business' } })).json.vision;
+    expect(v).toMatchObject({ horizon: 'long', category: 'business' });
+    expect((await call('POST', '/visions', { body: { title: 'x', horizon: 'someday' } })).status).toBe(400);
+  });
+});

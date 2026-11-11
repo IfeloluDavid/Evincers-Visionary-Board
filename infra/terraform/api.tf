@@ -5,7 +5,7 @@ data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${path.module}/../../backend/dist"
   output_path = "${path.module}/.build/api.zip"
-  excludes    = ["index.mjs.map"]
+  excludes    = ["*.map"]
 }
 
 resource "aws_cloudwatch_log_group" "api_lambda" {
@@ -70,7 +70,8 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      TABLE_NAME = aws_dynamodb_table.main.name
+      TABLE_NAME        = aws_dynamodb_table.main.name
+      REMINDERS_ENABLED = var.reminder_from_email != "" ? "true" : "false"
     }
   }
 
@@ -92,6 +93,12 @@ locals {
     "DELETE /visions/{id}/steps/{stepId}",
     "GET /steps/upcoming",
     "GET /community",
+    "GET /me",
+    "PATCH /me",
+    "GET /journey",
+    "GET /gratitude",
+    "POST /gratitude",
+    "DELETE /gratitude/{id}",
   ]
 }
 

@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Footprints, Pencil, Trash2, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
+import Band from '../components/Band';
 import ProgressRing from '../components/ProgressRing';
+import Trail from '../components/Trail';
+import { useJourney } from '../JourneyContext';
 import VisionForm from '../components/VisionForm';
-import { CATEGORY_META, STATUS_LABEL, formatDay, percent, relativeDay } from '../lib';
+import { CATEGORY_META, HORIZON_META, STATUS_LABEL, formatDay, percent, relativeDay } from '../lib';
 import type { Step, Vision } from '../types';
 
 export default function VisionPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const { refresh } = useJourney();
   const [vision, setVision] = useState<Vision | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
   const [error, setError] = useState('');
@@ -48,6 +53,7 @@ export default function VisionPage() {
   if (!vision) return <p className="muted">{error || 'Loading…'}</p>;
 
   const meta = CATEGORY_META[vision.category];
+  const CatIcon = meta.icon;
   const pct = percent(vision.stepsDone, vision.stepsTotal);
   const due = vision.targetDate ? relativeDay(vision.targetDate) : null;
   const allDone = vision.stepsTotal > 0 && vision.stepsDone === vision.stepsTotal && vision.status === 'active';
@@ -81,6 +87,7 @@ export default function VisionPage() {
       const r = await api.updateStep(id, s.id, { done: !s.done });
       setSteps((list) => list.map((x) => (x.id === s.id ? r.step : x)));
       setVision(r.vision);
+      if (!s.done) void refresh({ xp: 10 });
     });
 
   const saveStepTitle = (s: Step) =>
@@ -102,6 +109,7 @@ export default function VisionPage() {
   const markAchieved = () =>
     guard(async () => {
       setVision(await api.updateVision(id, { status: 'achieved' }));
+      void refresh({ xp: 150 });
     });
 
   const removeVision = () =>
@@ -117,8 +125,8 @@ export default function VisionPage() {
 
       <header className="detail-head">
         <div>
-          <span className="cat">{meta.emoji} {meta.label}</span>
-          <h1>{vision.title}</h1>
+          <span className="cat"><span className="cat-icon"><CatIcon size={18} aria-hidden /></span> {meta.label} · {HORIZON_META[vision.horizon].label}</span>
+          <h1 className="vision-title">{vision.title}</h1>
           <div className="meta">
             <span className={`badge ${vision.status}`}>{STATUS_LABEL[vision.status]}</span>
             {vision.targetDate && (
@@ -127,7 +135,7 @@ export default function VisionPage() {
                 {due && vision.status === 'active' && <span className={`chip ${due.tone}`}>{due.text}</span>}
               </span>
             )}
-            <span>{vision.visibility === 'church' ? '⛪ Shared with the church' : '🔒 Private'}</span>
+            <span>{vision.visibility === 'church' ? 'Shared with the church' : 'Private'}</span>
           </div>
         </div>
         <ProgressRing value={pct} size={96} />
@@ -137,7 +145,7 @@ export default function VisionPage() {
       {vision.description && <p className="description">{vision.description}</p>}
 
       <div className="toolbar">
-        <button className="btn" onClick={() => setEditing(true)}>Edit</button>
+        <button className="btn" onClick={() => setEditing(true)}><Pencil size={16} aria-hidden /> Edit</button>
         {vision.status !== 'achieved' ? (
           <button className="btn" onClick={() => void markAchieved()}>Mark achieved ✓</button>
         ) : (
@@ -145,21 +153,23 @@ export default function VisionPage() {
             Reopen
           </button>
         )}
-        <button className="btn danger" onClick={() => void removeVision()}>Delete</button>
+        <button className="btn danger" onClick={() => void removeVision()}><Trash2 size={16} aria-hidden /> Delete</button>
       </div>
 
       {error && <p className="error banner" role="alert">{error}</p>}
 
       {allDone && (
         <div className="celebrate" role="status">
-          🎉 Every step is done! <button className="link" onClick={() => void markAchieved()}>Mark this vision achieved</button>
+          Every step is done. Well done! <button className="link" onClick={() => void markAchieved()}>Mark this vision achieved</button>
         </div>
       )}
 
+      <Trail steps={steps} title={vision.title} achieved={vision.status === 'achieved'} />
+
       <section className="steps" aria-label="Steps">
-        <h2>
-          Steps <span className="muted">{vision.stepsDone}/{vision.stepsTotal}</span>
-        </h2>
+        <Band icon={Footprints} title="The Steps I'm Taking" hint="To get there…">
+          <span className="count">{vision.stepsDone}/{vision.stepsTotal}</span>
+        </Band>
 
         <form className="add-step" onSubmit={(e) => void addStep(e)}>
           <input
@@ -202,8 +212,8 @@ export default function VisionPage() {
                   {sd && <span className={`chip ${sd.tone}`}>{sd.text}</span>}
                   {s.done && s.doneAt && <small className="muted">Done {new Date(s.doneAt).toLocaleDateString()}</small>}
                   <span className="step-actions">
-                    <button className="icon" aria-label={`Edit "${s.title}"`} onClick={() => { setEditingStep(s.id); setDraft(s.title); }}>✎</button>
-                    <button className="icon" aria-label={`Delete "${s.title}"`} onClick={() => void removeStep(s)}>✕</button>
+                    <button className="icon" aria-label={`Edit "${s.title}"`} onClick={() => { setEditingStep(s.id); setDraft(s.title); }}><Pencil size={15} aria-hidden /></button>
+                    <button className="icon" aria-label={`Delete "${s.title}"`} onClick={() => void removeStep(s)}><X size={16} aria-hidden /></button>
                   </span>
                 </li>
               );

@@ -1,11 +1,16 @@
 export const CATEGORIES = [
   'spiritual',
   'family',
+  'relationships',
   'health',
+  'mind',
   'career',
+  'business',
   'finance',
   'ministry',
   'education',
+  'creativity',
+  'lifestyle',
   'other',
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -16,6 +21,13 @@ export type Status = (typeof STATUSES)[number];
 /** private = only the owner; church = visible to every signed-in member in the Community feed. */
 export const VISIBILITIES = ['private', 'church'] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
+
+/** Mirrors the postcard: an immediate goal (next weeks/months) or a long-term one. */
+export const HORIZONS = ['immediate', 'long'] as const;
+export type Horizon = (typeof HORIZONS)[number];
+
+export const REMINDER_FREQUENCIES = ['weekly', 'monthly', 'off'] as const;
+export type ReminderFrequency = (typeof REMINDER_FREQUENCIES)[number];
 
 export interface Vision {
   id: string;
@@ -30,6 +42,7 @@ export interface Vision {
   targetDate: string | null;
   status: Status;
   visibility: Visibility;
+  horizon: Horizon;
   stepsTotal: number;
   stepsDone: number;
   createdAt: string;
@@ -55,4 +68,20 @@ export const LIMITS = {
   maxVisionsPerUser: 100,
   maxStepsPerVision: 100,
   communityPageSize: 60,
+  maxGratitudeListed: 200,
 } as const;
+
+/** Per-member settings. Absent item = defaults (weekly reminders). */
+export interface Profile {
+  userId: string;
+  reminders: ReminderFrequency;
+  updatedAt: string;
+}
+
+/** A line in the member's gratitude journal ("What I'm grateful for"). */
+export interface Gratitude {
+  id: string;
+  userId: string;
+  text: string;
+  createdAt: string;
+}

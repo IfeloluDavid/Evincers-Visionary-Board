@@ -42,7 +42,8 @@ jobs:
         run: ./scripts/use-remote-state.sh "${{ vars.TF_STATE_BUCKET }}" "${{ vars.TF_LOCK_TABLE }}" "${{ vars.AWS_REGION }}"
 
       - name: Test, build, apply and publish
-        run: ./scripts/deploy.sh -auto-approve \
+        run: |
+          ./scripts/deploy.sh -auto-approve \
             -var="region=${{ vars.AWS_REGION }}" \
             -var="reminder_from_email=${{ vars.REMINDER_FROM_EMAIL }}" \
             -var="reminder_timezone=${{ vars.REMINDER_TIMEZONE || 'UTC' }}"
